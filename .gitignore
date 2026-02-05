@@ -137,3 +137,6 @@ dist
 
 # dist-file
 src/modules/*.json
+
+# generated
+generated
