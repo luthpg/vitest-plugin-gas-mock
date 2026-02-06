@@ -10,6 +10,7 @@ Vitest plugin to mock Google Apps Script (GAS) environment.
 ## Features
 
 - **Automatic Mocking**: Dynamically generates mocks based on official `@types/google-apps-script`.
+- **Enum Support**: Includes support for GAS enums (e.g., `SpreadsheetApp.BorderStyle.SOLID`).
 - **Method Chaining**: Supports GAS fluent APIs (e.g., `SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Sheet1')`).
 - **Global Injection**: Automatically injects mocks into the global scope in tests.
 - **`mockChain` Helper**: Easily override return values for complex method paths.
@@ -67,7 +68,6 @@ it('should return specific value for a chain', () => {
   
   // Set the override
   mockChain(
-    SpreadsheetApp, 
     'SpreadsheetApp.getActiveSpreadsheet.getName', 
     mockValue
   );

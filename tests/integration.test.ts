@@ -17,12 +17,15 @@ describe('Global Injection', () => {
     expect(SpreadsheetApp.getActiveSpreadsheet).toHaveBeenCalled();
   });
 
-  // TODO: Enum injection needs further investigation
-  // BorderStyle is in enumMap but not appearing in globalThis
-  it.skip('should have Enums globally available', () => {
+  it('should have Enums globally available', () => {
     expect(BorderStyle).toBeDefined();
     expect(BorderStyle.SOLID).toBeDefined();
     expect(typeof BorderStyle.SOLID).toBe('string');
+  });
+
+  it('should allow accessing enums through SpreadsheetApp', () => {
+    expect(SpreadsheetApp.BorderStyle).toBeDefined();
+    expect(SpreadsheetApp.BorderStyle.SOLID).toBe('SOLID');
   });
 
   it('should have other globals like DriveApp', () => {
