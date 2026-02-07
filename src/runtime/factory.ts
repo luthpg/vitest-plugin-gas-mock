@@ -13,7 +13,7 @@ export function createMock(className: string, currentPath?: string): any {
 
   // Enumの場合は値をそのまま返す
   if (classDef?.kind === 'enum' && classDef.members) {
-    const enumObj: any = {};
+    const enumObj: Record<string, string | number> = {};
     for (const [memberName, memberValue] of Object.entries(classDef.members)) {
       enumObj[memberName] = memberValue ?? memberName;
     }
@@ -55,7 +55,7 @@ export function createMock(className: string, currentPath?: string): any {
           return Reflect.get(target, prop, receiver);
         }
 
-        const mockFn = vi.fn((..._args: any[]) => {
+        const mockFn = vi.fn((..._args: unknown[]) => {
           // 現在のパスを計算
           // ClassName.methodName という形式にする
           // ルートの場合は className がセットされているはず
@@ -71,8 +71,17 @@ export function createMock(className: string, currentPath?: string): any {
 
           // メソッド実行時の戻り値
           if (methodDef.isChainable && methodDef.returnType) {
+            // 配列の場合は、中身の型のモックを1つ入れた配列を返す (for/map等で回せるように)
+            if ((methodDef as any).isIterable) {
+              return [createMock(methodDef.returnType, `${nextPath}[0]`)];
+            }
             return createMock(methodDef.returnType, nextPath);
           }
+
+          if (methodDef.returnType) {
+            return resolveReturnValue(methodDef.returnType, nextPath);
+          }
+
           return undefined; // void or primitive
         });
 
@@ -87,7 +96,14 @@ export function createMock(className: string, currentPath?: string): any {
         return mockFn;
       }
 
-      // 3. 定義にないプロパティ
+      // 3. 定義にないが、GlobalMap (classMap) に存在するプロパティ (Enumなど)
+      // 例: SpreadsheetApp.Direction -> classMap['SpreadsheetApp.Direction']
+      const nestedClassName = `${className}.${paramName}`;
+      if (classMap[nestedClassName]) {
+        return createMock(nestedClassName, nestedClassName);
+      }
+
+      // 4. 定義にないプロパティ
       return Reflect.get(target, prop, receiver);
     },
 
@@ -102,9 +118,9 @@ export function createMock(className: string, currentPath?: string): any {
  */
 function resolveReturnValue(typeName: string, childPath?: string): any {
   // 基本型
-  if (typeName === 'string') return '';
-  if (typeName === 'number') return 0;
-  if (typeName === 'boolean') return false;
+  if (typeName === 'string' || typeName === 'String') return '';
+  if (typeName === 'number' || typeName === 'Number') return 0;
+  if (typeName === 'boolean' || typeName === 'Boolean') return false;
   if (typeName === 'void') return undefined;
 
   // GASクラス型ならモックを返す

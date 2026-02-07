@@ -4,6 +4,7 @@ import {
   type InterfaceDeclaration,
   type ModuleDeclaration,
   Project,
+  SyntaxKind,
   type TypeNode,
 } from 'ts-morph';
 
@@ -22,6 +23,7 @@ export interface MapEntry {
       returnType: string;
       isChainable: boolean;
       overloads?: number;
+      isIterable?: boolean;
     };
   };
   properties?: {
@@ -211,7 +213,12 @@ export const generateGasMap = async () => {
     // メソッドマージ
     const methodsMap = new Map<
       string,
-      { returnType: string; isChainable: boolean; count: number }
+      {
+        returnType: string;
+        isChainable: boolean;
+        isIterable: boolean;
+        count: number;
+      }
     >();
 
     if (gasMap[className].methods) {
@@ -219,6 +226,7 @@ export const generateGasMap = async () => {
         methodsMap.set(name, {
           returnType: info.returnType,
           isChainable: info.isChainable,
+          isIterable: (info as { isIterable?: boolean }).isIterable ?? false,
           count: info.overloads || 1,
         });
       }
@@ -233,13 +241,22 @@ export const generateGasMap = async () => {
         gasInterfaceNames,
       );
 
+      // 配列かどうかを簡易判定
+      const returnTypeText = returnTypeNode.getText();
+      const isIterable =
+        returnTypeText.includes('[]') ||
+        returnTypeText.includes('Array<') ||
+        returnTypeNode.getKind() === SyntaxKind.ArrayType;
+
       const existing = methodsMap.get(methodName);
       if (existing) {
         existing.count++;
+        if (isIterable) existing.isIterable = true;
       } else {
         methodsMap.set(methodName, {
           returnType: typeName,
           isChainable,
+          isIterable,
           count: 1,
         });
       }
@@ -250,6 +267,7 @@ export const generateGasMap = async () => {
       methodsObj[name] = {
         returnType: info.returnType,
         isChainable: info.isChainable,
+        ...(info.isIterable && { isIterable: true }),
         ...(info.count > 1 && { overloads: info.count }),
       };
     }
