@@ -11,8 +11,24 @@ export function createMock(className: string, currentPath?: string): any {
   // 定義が存在しない場合は汎用的なモックを返す
   const classDef = classMap[className];
 
+  // Enumの場合は値をそのまま返す
+  if (classDef?.kind === 'enum' && classDef.members) {
+    const enumObj: any = {};
+    for (const [memberName, memberValue] of Object.entries(classDef.members)) {
+      enumObj[memberName] = memberValue ?? memberName;
+    }
+    return enumObj;
+  }
+
   // ターゲットは空の関数
   const target = () => {};
+
+  // Enumメンバーがあれば追加
+  if (classDef?.members) {
+    for (const [memberName, memberValue] of Object.entries(classDef.members)) {
+      (target as any)[memberName] = memberValue ?? memberName;
+    }
+  }
 
   const proxy = new Proxy(target, {
     get: (target, prop, receiver) => {

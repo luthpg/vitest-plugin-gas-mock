@@ -1,6 +1,6 @@
 {
   "name": "@ciderjs/vitest-plugin-gas-mock",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Vitest plugin to mock Google Apps Script environment",
   "main": "dist/index.mjs",
   "types": "dist/index.d.ts",

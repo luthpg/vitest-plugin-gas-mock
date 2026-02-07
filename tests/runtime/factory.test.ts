@@ -23,7 +23,6 @@ describe('factory', () => {
 
   test('should support mockChain override for default values', () => {
     mockChain(
-      null,
       'SpreadsheetApp.getActiveSpreadsheet.getSheetByName.getName',
       'Overridden Sheet Name',
     );

@@ -9,38 +9,35 @@ import {
 
 // 出力ディレクトリ
 const GENERATED_DIR = path.resolve(__dirname, '../generated');
-if (!fs.existsSync(GENERATED_DIR)) {
-  fs.mkdirSync(GENERATED_DIR);
+if (fs.existsSync(GENERATED_DIR)) {
+  fs.rmSync(GENERATED_DIR, { recursive: true });
 }
+fs.mkdirSync(GENERATED_DIR);
 
 // 解析結果のマップ
-export interface ClassMap {
-  [className: string]: {
-    methods: {
-      [methodName: string]: {
-        returnType: string;
-        isChainable: boolean;
-        overloads?: number;
-      };
-    };
-    properties?: {
-      [propertyName: string]: {
-        type: string;
-        isReadonly: boolean;
-      };
+export interface MapEntry {
+  kind: 'class' | 'enum';
+  methods?: {
+    [methodName: string]: {
+      returnType: string;
+      isChainable: boolean;
+      overloads?: number;
     };
   };
-}
-
-export interface EnumMap {
-  [enumName: string]: {
-    namespace: string;
-    members: string[];
+  properties?: {
+    [propertyName: string]: {
+      type: string;
+      isReadonly: boolean;
+    };
   };
+  members?: Record<string, string | number>; // Enum用
 }
 
-const classMap: ClassMap = {};
-const enumMap: EnumMap = {};
+export interface GasMap {
+  [name: string]: MapEntry;
+}
+
+const gasMap: GasMap = {};
 
 // TypeScriptプロジェクトの初期化
 console.log('🔍 Initializing ts-morph project...');
@@ -61,7 +58,8 @@ console.log(`files found: ${sourceFiles.length}`);
 
 // 型名を簡略化するヘルパー関数
 function simplifyTypeName(typeText: string): string {
-  const parts = typeText.split('.');
+  const text = typeText.replace(/^typeof /, '');
+  const parts = text.split('.');
   let simplifiedName = parts[parts.length - 1];
 
   simplifiedName = simplifiedName.replace(/\[\]/g, '');
@@ -114,11 +112,23 @@ export const generateGasMap = async () => {
     if (enums) {
       for (const enumDecl of enums) {
         const enumName = enumDecl.getName();
-        const members = enumDecl.getMembers().map((m) => m.getName());
-        enumMap[enumName] = {
-          namespace: namespacePath,
-          members,
-        };
+        const members: Record<string, string | number> = {};
+        for (const m of enumDecl.getMembers()) {
+          const value = m.getValue();
+          members[m.getName()] = value !== undefined ? value : m.getName();
+        }
+        if (gasMap[enumName]) {
+          // 既存のエントリがある場合はマージ (メンバーを追加)
+          gasMap[enumName].members = {
+            ...(gasMap[enumName].members || {}),
+            ...members,
+          };
+        } else {
+          gasMap[enumName] = {
+            kind: 'enum',
+            members,
+          };
+        }
       }
     }
 
@@ -137,8 +147,31 @@ export const generateGasMap = async () => {
     collectDeclarations(ns, '');
   }
 
+  // 名前空間外のEnumも収集 (sourceFile.getEnums())
+  for (const sf of sourceFiles) {
+    for (const enumDecl of sf.getEnums()) {
+      const enumName = enumDecl.getName();
+      const members: Record<string, string | number> = {};
+      for (const m of enumDecl.getMembers()) {
+        const value = m.getValue();
+        members[m.getName()] = value !== undefined ? value : m.getName();
+      }
+      if (gasMap[enumName]) {
+        gasMap[enumName].members = {
+          ...(gasMap[enumName].members || {}),
+          ...members,
+        };
+      } else {
+        gasMap[enumName] = {
+          kind: 'enum',
+          members,
+        };
+      }
+    }
+  }
+
   console.log(
-    `🧩 Found ${allInterfaces.length} interfaces and ${Object.keys(enumMap).length} enums. Analyzing relationships...`,
+    `🧩 Found ${allInterfaces.length} interfaces and ${Object.values(gasMap).filter((v) => v.kind === 'enum').length} enums. Analyzing relationships...`,
   );
 
   const gasInterfaceNames = new Set(allInterfaces.map((i) => i.getName()));
@@ -148,28 +181,27 @@ export const generateGasMap = async () => {
 
     if (className === 'Integer' || className === 'Byte') continue;
 
-    if (!classMap[className]) {
-      classMap[className] = { methods: {} };
-    }
-
-    if (className === 'Spreadsheet') {
-      // デバッグログ
-      console.log(
-        `DEBUG: Spreadsheet found in ${interfaceDecl.getSourceFile().getFilePath()} (Methods: ${interfaceDecl.getMethods().length})`,
-      );
+    if (!gasMap[className]) {
+      gasMap[className] = { kind: 'class', methods: {} };
+    } else {
+      // 既存のエントリがある場合 (Enumなど)、クラスとしてマークしメソッドを初期化
+      gasMap[className].kind = 'class';
+      if (!gasMap[className].methods) {
+        gasMap[className].methods = {};
+      }
     }
 
     const properties = interfaceDecl.getProperties();
     if (properties.length > 0) {
-      if (!classMap[className].properties) {
-        classMap[className].properties = {};
+      if (!gasMap[className].properties) {
+        gasMap[className].properties = {};
       }
       for (const prop of properties) {
         const propName = prop.getName();
         const propType = prop.getType().getText();
         const isReadonly = prop.isReadonly();
 
-        classMap[className].properties[propName] = {
+        gasMap[className].properties[propName] = {
           type: simplifyTypeName(propType),
           isReadonly,
         };
@@ -182,8 +214,8 @@ export const generateGasMap = async () => {
       { returnType: string; isChainable: boolean; count: number }
     >();
 
-    if (classMap[className].methods) {
-      for (const [name, info] of Object.entries(classMap[className].methods)) {
+    if (gasMap[className].methods) {
+      for (const [name, info] of Object.entries(gasMap[className].methods)) {
         methodsMap.set(name, {
           returnType: info.returnType,
           isChainable: info.isChainable,
@@ -213,7 +245,7 @@ export const generateGasMap = async () => {
       }
     }
 
-    const methodsObj: ClassMap[string]['methods'] = {};
+    const methodsObj: MapEntry['methods'] = {};
     for (const [name, info] of methodsMap.entries()) {
       methodsObj[name] = {
         returnType: info.returnType,
@@ -221,14 +253,10 @@ export const generateGasMap = async () => {
         ...(info.count > 1 && { overloads: info.count }),
       };
     }
-    classMap[className].methods = methodsObj;
+    gasMap[className].methods = methodsObj;
   }
 
-  const outputPath = path.join(GENERATED_DIR, 'apps-script-map.json');
-  fs.writeFileSync(outputPath, JSON.stringify(classMap, null, 2));
+  const outputPath = path.join(GENERATED_DIR, 'map.json');
+  fs.writeFileSync(outputPath, JSON.stringify(gasMap, null, 2));
   console.log(`✅ Map generated at ${outputPath}`);
-
-  const enumsOutputPath = path.join(GENERATED_DIR, 'apps-script-enums.json');
-  fs.writeFileSync(enumsOutputPath, JSON.stringify(enumMap, null, 2));
-  console.log(`✅ Enums generated at ${enumsOutputPath}`);
 };

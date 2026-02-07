@@ -1,5 +1,5 @@
 import { createMock } from './runtime/factory';
-import { classMap, enumMap } from './runtime/loader';
+import { classMap } from './runtime/loader';
 
 // グローバルを汚染すると危険なクラス名を除外
 const blacklist = new Set([
@@ -31,26 +31,10 @@ const blacklist = new Set([
 ]);
 
 // ClassMapにあるすべてのキーをグローバルに展開
-Object.keys(classMap).forEach((className) => {
-  if (blacklist.has(className)) return;
+Object.keys(classMap).forEach((name) => {
+  if (blacklist.has(name)) return;
 
-  if (!(className in globalThis)) {
-    (globalThis as Record<string, unknown>)[className] = createMock(
-      className,
-      className,
-    );
-  }
-});
-
-// Enumの注入
-Object.keys(enumMap).forEach((enumName) => {
-  const members = enumMap[enumName].members;
-  const enumObj: Record<string, string> = {};
-  members.forEach((m) => {
-    enumObj[m] = `${enumName}_${m}`;
-  });
-
-  if (!(enumName in globalThis)) {
-    (globalThis as Record<string, unknown>)[enumName] = enumObj;
+  if (!(name in globalThis)) {
+    (globalThis as Record<string, unknown>)[name] = createMock(name, name);
   }
 });
