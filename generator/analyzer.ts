@@ -24,6 +24,7 @@ export interface MapEntry {
       isChainable: boolean;
       overloads?: number;
       isIterable?: boolean;
+      dimensions?: number;
     };
   };
   properties?: {
@@ -217,6 +218,7 @@ export const generateGasMap = async () => {
         returnType: string;
         isChainable: boolean;
         isIterable: boolean;
+        dimensions: number;
         count: number;
       }
     >();
@@ -227,6 +229,7 @@ export const generateGasMap = async () => {
           returnType: info.returnType,
           isChainable: info.isChainable,
           isIterable: (info as { isIterable?: boolean }).isIterable ?? false,
+          dimensions: (info as { dimensions?: number }).dimensions ?? 0,
           count: info.overloads || 1,
         });
       }
@@ -243,20 +246,20 @@ export const generateGasMap = async () => {
 
       // 配列かどうかを簡易判定
       const returnTypeText = returnTypeNode.getText();
-      const isIterable =
-        returnTypeText.includes('[]') ||
-        returnTypeText.includes('Array<') ||
-        returnTypeNode.getKind() === SyntaxKind.ArrayType;
+      const dims = (returnTypeText.match(/\[\]/g) || []).length;
+      const isIterable = dims > 0;
 
       const existing = methodsMap.get(methodName);
       if (existing) {
         existing.count++;
         if (isIterable) existing.isIterable = true;
+        if (dims > (existing.dimensions || 0)) existing.dimensions = dims;
       } else {
         methodsMap.set(methodName, {
           returnType: typeName,
           isChainable,
           isIterable,
+          dimensions: dims,
           count: 1,
         });
       }
@@ -268,6 +271,7 @@ export const generateGasMap = async () => {
         returnType: info.returnType,
         isChainable: info.isChainable,
         ...(info.isIterable && { isIterable: true }),
+        ...(info.dimensions && { dimensions: info.dimensions }),
         ...(info.count > 1 && { overloads: info.count }),
       };
     }

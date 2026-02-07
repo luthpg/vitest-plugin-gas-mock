@@ -7,29 +7,38 @@ import { classMap } from './loader';
  * @param className GASのクラス名 (e.g., "SpreadsheetApp", "Sheet")
  * @param currentPath 現在のメソッドチェーンのパス (e.g., "SpreadsheetApp.getActiveSpreadsheet")
  */
-export function createMock(className: string, currentPath?: string): any {
+export function createMock<T = any>(
+  className: string,
+  currentPath?: string,
+): T {
   // 定義が存在しない場合は汎用的なモックを返す
   const classDef = classMap[className];
+  const path = currentPath || className;
+
+  if (!classDef) {
+    return new Proxy(vi.fn(), {
+      get: (target, prop, receiver) => {
+        if (typeof prop === 'string') {
+          // 特殊なプロパティへのアクセスは無視
+          if (prop === 'then' || prop === 'toJSON') {
+            return Reflect.get(target, prop, receiver);
+          }
+          // すでにclassNameに含まれているか、pathに基づいて探索を試みるための
+          // fallbackとして単純にprop名でcreateMockを呼び出す
+          return createMock(prop, `${path}.${prop}`);
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as unknown as T;
+  }
 
   // Enumの場合は値をそのまま返す
-  if (classDef?.kind === 'enum' && classDef.members) {
-    const enumObj: Record<string, string | number> = {};
-    for (const [memberName, memberValue] of Object.entries(classDef.members)) {
-      enumObj[memberName] = memberValue ?? memberName;
-    }
-    return enumObj;
+  if (classDef.kind === 'enum' && classDef.members) {
+    // Enum自体が個別の値として読み込まれる場合
+    return classDef.members as unknown as T;
   }
 
-  // ターゲットは空の関数
-  const target = () => {};
-
-  // Enumメンバーがあれば追加
-  if (classDef?.members) {
-    for (const [memberName, memberValue] of Object.entries(classDef.members)) {
-      (target as any)[memberName] = memberValue ?? memberName;
-    }
-  }
-
+  const target = vi.fn();
   const proxy = new Proxy(target, {
     get: (target, prop, receiver) => {
       // シンボルや特殊なプロパティへのアクセスは無視
@@ -37,17 +46,21 @@ export function createMock(className: string, currentPath?: string): any {
         return Reflect.get(target, prop, receiver);
       }
 
-      const paramName = prop as string;
+      const paramName = String(prop);
 
       // 1. プロパティ定義にあるか確認
-      if (classDef?.properties?.[paramName]) {
+      if (classDef.properties?.[paramName]) {
         const propType = classDef.properties[paramName].type;
-        // プロパティの場合はパスを更新しない（あるいはプロパティ名を含めるか要検討だが、メソッドチェーン主眼なので一旦無視）
-        return resolveReturnValue(propType, undefined);
+        return resolveReturnValue(propType, `${path}.${paramName}`);
       }
 
-      // 2. メソッド定義にあるか確認
-      if (classDef?.methods?.[paramName]) {
+      // 2. Enumメンバーか確認 (analyzerでmembersが抽出されている場合)
+      if (classDef.members && paramName in classDef.members) {
+        return classDef.members[paramName];
+      }
+
+      // 3. メソッドか確認
+      if (classDef.methods?.[paramName]) {
         const methodDef = classDef.methods[paramName];
 
         // すでに値がセットされていればそれを返す
@@ -57,11 +70,7 @@ export function createMock(className: string, currentPath?: string): any {
 
         const mockFn = vi.fn((..._args: unknown[]) => {
           // 現在のパスを計算
-          // ClassName.methodName という形式にする
-          // ルートの場合は className がセットされているはず
-          const nextPath = currentPath
-            ? `${currentPath}.${paramName}`
-            : `${className}.${paramName}`;
+          const nextPath = `${path}.${paramName}`;
 
           // オーバーライドを確認
           const override = getOverride(nextPath);
@@ -70,63 +79,114 @@ export function createMock(className: string, currentPath?: string): any {
           }
 
           // メソッド実行時の戻り値
-          if (methodDef.isChainable && methodDef.returnType) {
-            // 配列の場合は、中身の型のモックを1つ入れた配列を返す (for/map等で回せるように)
-            if ((methodDef as any).isIterable) {
-              return [createMock(methodDef.returnType, `${nextPath}[0]`)];
-            }
-            return createMock(methodDef.returnType, nextPath);
-          }
-
           if (methodDef.returnType) {
-            return resolveReturnValue(methodDef.returnType, nextPath);
+            if (methodDef.returnType === 'void') {
+              return undefined;
+            }
+            const dims = methodDef.dimensions || (methodDef.isIterable ? 1 : 0);
+            const baseValue = resolveReturnValue(
+              methodDef.returnType,
+              nextPath,
+            );
+
+            let result = baseValue;
+            for (let i = 0; i < dims; i++) {
+              result = [result];
+            }
+            return result;
           }
 
-          return undefined; // void or primitive
+          return undefined; // void or no return type
         });
 
         // モック名を設定（デバッグ用）
-        mockFn.mockName(
-          currentPath
-            ? `${currentPath}.${paramName}`
-            : `${className}.${paramName}`,
-        );
+        mockFn.mockName(nextPath(path, paramName));
 
         (target as any)[paramName] = mockFn;
         return mockFn;
       }
 
-      // 3. 定義にないが、GlobalMap (classMap) に存在するプロパティ (Enumなど)
-      // 例: SpreadsheetApp.Direction -> classMap['SpreadsheetApp.Direction']
+      // 4. ネストされたクラスやEnumの可能性を考慮してcreateMockを再帰的に呼ぶ
+      // classNameを "Parent.Child" 形式で探してみる
       const nestedClassName = `${className}.${paramName}`;
       if (classMap[nestedClassName]) {
-        return createMock(nestedClassName, nestedClassName);
+        return createMock(nestedClassName, `${path}.${paramName}`);
       }
 
-      // 4. 定義にないプロパティ
+      // 5. 定義にないプロパティ
       return Reflect.get(target, prop, receiver);
     },
 
     apply: () => undefined,
   });
 
-  return proxy;
+  return proxy as unknown as T;
+}
+
+function nextPath(path: string, paramName: string): string {
+  return `${path}.${paramName}`;
 }
 
 /**
  * 戻り値の型名から実際の値を解決する
  */
-function resolveReturnValue(typeName: string, childPath?: string): any {
-  // 基本型
-  if (typeName === 'string' || typeName === 'String') return '';
-  if (typeName === 'number' || typeName === 'Number') return 0;
-  if (typeName === 'boolean' || typeName === 'Boolean') return false;
-  if (typeName === 'void') return undefined;
+function resolveReturnValue(type: string, path: string): unknown {
+  const normalizedType = type.toLowerCase();
 
-  // GASクラス型ならモックを返す
-  if (classMap[typeName]) {
-    return createMock(typeName, childPath);
+  // 1. プリミティブ型のデフォルト値
+  if (
+    normalizedType === 'number' ||
+    normalizedType === 'integer' ||
+    normalizedType === 'byte'
+  ) {
+    return 0;
+  }
+  if (normalizedType === 'string') {
+    return '';
+  }
+  if (normalizedType === 'boolean') {
+    return false;
+  }
+  if (normalizedType === 'void') {
+    return undefined;
+  }
+  if (normalizedType === 'date') {
+    return new Date();
+  }
+  if (normalizedType === 'object' || normalizedType === 'any') {
+    return {};
+  }
+  // オブジェクトリテラル型 (e.g. { [key: string]: string })
+  if (normalizedType.startsWith('{')) {
+    return {};
   }
 
-  return undefined;
+  // 2. クラスMapに定義がある場合はそのクラスのモックを作成
+  if (classMap[type]) {
+    return createMock(type, path);
+  }
+
+  // 3. Enumやその他の型定義を探す
+  // ネストされた型の場合 (e.g. SpreadsheetApp.Direction)
+  if (classMap[`${path}.${type}`]) {
+    return createMock(`${path}.${type}`, `${path}.${type}`);
+  }
+
+  // 完全修飾名での解決を試みる (e.g. PropertiesService.ScriptProperties)
+  // ここでは簡易的に、typeがクラス名として登録されているか確認
+  const potentialFullMatches = Object.keys(classMap).filter((k) =>
+    k.endsWith(`.${type}`),
+  );
+  if (potentialFullMatches.length >= 1) {
+    return createMock(potentialFullMatches[0], potentialFullMatches[0]);
+  }
+
+  // 4. Globalなクラス検索 (e.g. Sheet, Range)
+  const globalMatch = Object.keys(classMap).find((k) => k === type);
+  if (globalMatch) {
+    return createMock(globalMatch, globalMatch);
+  }
+
+  // 4. それ以外は汎用的なモックを返す
+  return createMock(type, path);
 }

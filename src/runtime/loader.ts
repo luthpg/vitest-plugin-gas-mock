@@ -9,6 +9,7 @@ export interface MapEntry {
       isChainable: boolean;
       overloads?: number;
       isIterable?: boolean;
+      dimensions?: number;
     };
   };
   properties?: {
