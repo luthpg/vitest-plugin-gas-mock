@@ -8,6 +8,8 @@ export interface MapEntry {
       returnType: string;
       isChainable: boolean;
       overloads?: number;
+      isIterable?: boolean;
+      dimensions?: number;
     };
   };
   properties?: {

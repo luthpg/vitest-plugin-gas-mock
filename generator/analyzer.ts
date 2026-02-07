@@ -4,6 +4,7 @@ import {
   type InterfaceDeclaration,
   type ModuleDeclaration,
   Project,
+  SyntaxKind,
   type TypeNode,
 } from 'ts-morph';
 
@@ -22,6 +23,8 @@ export interface MapEntry {
       returnType: string;
       isChainable: boolean;
       overloads?: number;
+      isIterable?: boolean;
+      dimensions?: number;
     };
   };
   properties?: {
@@ -211,7 +214,13 @@ export const generateGasMap = async () => {
     // メソッドマージ
     const methodsMap = new Map<
       string,
-      { returnType: string; isChainable: boolean; count: number }
+      {
+        returnType: string;
+        isChainable: boolean;
+        isIterable: boolean;
+        dimensions: number;
+        count: number;
+      }
     >();
 
     if (gasMap[className].methods) {
@@ -219,6 +228,8 @@ export const generateGasMap = async () => {
         methodsMap.set(name, {
           returnType: info.returnType,
           isChainable: info.isChainable,
+          isIterable: (info as { isIterable?: boolean }).isIterable ?? false,
+          dimensions: (info as { dimensions?: number }).dimensions ?? 0,
           count: info.overloads || 1,
         });
       }
@@ -233,13 +244,22 @@ export const generateGasMap = async () => {
         gasInterfaceNames,
       );
 
+      // 配列かどうかを簡易判定
+      const returnTypeText = returnTypeNode.getText();
+      const dims = (returnTypeText.match(/\[\]/g) || []).length;
+      const isIterable = dims > 0;
+
       const existing = methodsMap.get(methodName);
       if (existing) {
         existing.count++;
+        if (isIterable) existing.isIterable = true;
+        if (dims > (existing.dimensions || 0)) existing.dimensions = dims;
       } else {
         methodsMap.set(methodName, {
           returnType: typeName,
           isChainable,
+          isIterable,
+          dimensions: dims,
           count: 1,
         });
       }
@@ -250,6 +270,8 @@ export const generateGasMap = async () => {
       methodsObj[name] = {
         returnType: info.returnType,
         isChainable: info.isChainable,
+        ...(info.isIterable && { isIterable: true }),
+        ...(info.dimensions && { dimensions: info.dimensions }),
         ...(info.count > 1 && { overloads: info.count }),
       };
     }
