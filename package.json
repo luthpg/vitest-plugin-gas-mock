@@ -1,6 +1,6 @@
 {
   "name": "@ciderjs/vitest-plugin-gas-mock",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Vitest plugin to mock Google Apps Script environment",
   "main": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -45,17 +45,20 @@
   },
   "packageManager": "pnpm@10.28.2",
   "dependencies": {
-    "@types/google-apps-script": "^2.0.8",
-    "ts-morph": "^27.0.2",
     "vitest": "^4.0.18"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.14",
+    "@types/google-apps-script": "^2.0.8",
     "@types/node": "^25.2.0",
     "@typescript/native-preview": "7.0.0-dev.20260205.1",
     "@vitest/coverage-v8": "4.0.18",
     "jiti": "^2.6.1",
+    "ts-morph": "^27.0.2",
     "typescript": "^5.9.3",
     "unbuild": "^3.6.1"
+  },
+  "peerDependencies": {
+    "vitest": "^4"
   }
 }
