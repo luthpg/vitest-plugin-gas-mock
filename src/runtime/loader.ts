@@ -1,4 +1,4 @@
-import _gasMap from '../../generated/map.json';
+import _gasMap from '../../generated/map.json' with { type: 'json' };
 
 // 型定義のコピー (analyzer.tsから依存を切るため)
 export interface MapEntry {
