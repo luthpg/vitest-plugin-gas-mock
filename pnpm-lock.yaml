@@ -8,12 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@types/google-apps-script':
-        specifier: ^2.0.8
-        version: 2.0.8
-      ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@25.2.0)(jiti@2.6.1)
@@ -21,6 +15,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.3.14
         version: 2.3.14
+      '@types/google-apps-script':
+        specifier: ^2.0.8
+        version: 2.0.8
       '@types/node':
         specifier: ^25.2.0
         version: 25.2.0
@@ -33,6 +30,9 @@ importers:
       jiti:
         specifier: ^2.6.1
         version: 2.6.1
+      ts-morph:
+        specifier: ^27.0.2
+        version: 27.0.2
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
