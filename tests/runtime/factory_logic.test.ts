@@ -10,8 +10,8 @@ describe('factory logic (mocked)', () => {
       __esModule: true,
       classMap: {
         MockClass: {
-          kind: 'class',
-          methods: { getVal: { returnType: 'Number', isChainable: false } },
+          k: 'c',
+          m: { getVal: { rt: 'Number' } },
         },
       },
     }));
@@ -25,10 +25,10 @@ describe('factory logic (mocked)', () => {
       __esModule: true,
       classMap: {
         MockClass: {
-          kind: 'class',
-          methods: {
-            getInt: { returnType: 'Integer', isChainable: false },
-            getByte: { returnType: 'Byte', isChainable: false },
+          k: 'c',
+          m: {
+            getInt: { rt: 'Integer' },
+            getByte: { rt: 'Byte' },
           },
         },
       },
@@ -43,10 +43,10 @@ describe('factory logic (mocked)', () => {
     vi.doMock('../../src/runtime/loader', () => ({
       __esModule: true,
       classMap: {
-        MockClass: { kind: 'class', methods: {} },
+        MockClass: { k: 'c', m: {} },
         'MockClass.Color': {
-          kind: 'enum',
-          members: { RED: '#FF0000' },
+          k: 'e',
+          v: { RED: '#FF0000' },
         },
       },
     }));
@@ -60,18 +60,18 @@ describe('factory logic (mocked)', () => {
       __esModule: true,
       classMap: {
         MockClass: {
-          kind: 'class',
-          methods: {
+          k: 'c',
+          m: {
             getItems: {
-              returnType: 'MockItem',
-              isChainable: true,
-              isIterable: true,
+              rt: 'MockItem',
+              ic: 1,
+              ii: 1,
             },
           },
         },
         MockItem: {
-          kind: 'class',
-          methods: { getName: { returnType: 'String', isChainable: false } },
+          k: 'c',
+          m: { getName: { rt: 'String' } },
         },
       },
     }));
@@ -88,9 +88,9 @@ describe('factory logic (mocked)', () => {
       __esModule: true,
       classMap: {
         TestDate: {
-          kind: 'class',
-          methods: {
-            getNow: { returnType: 'Date', isChainable: false },
+          k: 'c',
+          m: {
+            getNow: { rt: 'Date' },
           },
         },
       },
@@ -107,12 +107,11 @@ describe('factory logic (mocked)', () => {
       __esModule: true,
       classMap: {
         TestObj: {
-          kind: 'class',
-          methods: {
-            getAny: { returnType: 'Object', isChainable: false },
+          k: 'c',
+          m: {
+            getAny: { rt: 'Object' },
             getLiteral: {
-              returnType: '{ [key: string]: string }',
-              isChainable: false,
+              rt: '{ [key: string]: string }',
             },
           },
         },
@@ -132,12 +131,11 @@ describe('factory logic (mocked)', () => {
       __esModule: true,
       classMap: {
         Range: {
-          kind: 'class',
-          methods: {
+          k: 'c',
+          m: {
             getValues: {
-              returnType: 'Object',
-              isChainable: false,
-              dimensions: 2,
+              rt: 'Object',
+              d: 2,
             },
           },
         },

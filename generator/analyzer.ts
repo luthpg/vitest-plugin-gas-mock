@@ -16,23 +16,23 @@ fs.mkdirSync(GENERATED_DIR);
 
 // 解析結果のマップ
 export interface MapEntry {
-  kind: 'class' | 'enum';
-  methods?: {
+  k: 'c' | 'e'; // kind (class | enum)
+  m?: {
     [methodName: string]: {
-      returnType: string;
-      isChainable: boolean;
-      overloads?: number;
-      isIterable?: boolean;
-      dimensions?: number;
+      rt: string; // returnType
+      ic?: 1; // isChainable (omit if false)
+      ol?: number; // overloads (omit if 1)
+      ii?: 1; // isIterable (omit if false)
+      d?: number; // dimensions (omit if 0)
     };
   };
-  properties?: {
+  p?: {
     [propertyName: string]: {
-      type: string;
-      isReadonly: boolean;
+      t: string; // type
+      ir?: 1; // isReadonly (omit if false)
     };
   };
-  members?: Record<string, string | number>; // Enum用
+  v?: Record<string, string | number>; // members (Enum用)
 }
 
 export interface GasMap {
@@ -124,14 +124,14 @@ export const generateGasMap = async () => {
         }
         if (gasMap[enumName]) {
           // 既存のエントリがある場合はマージ (メンバーを追加)
-          gasMap[enumName].members = {
-            ...(gasMap[enumName].members || {}),
+          gasMap[enumName].v = {
+            ...(gasMap[enumName].v || {}),
             ...members,
           };
         } else {
           gasMap[enumName] = {
-            kind: 'enum',
-            members,
+            k: 'e',
+            v: members,
           };
         }
       }
@@ -162,21 +162,21 @@ export const generateGasMap = async () => {
         members[m.getName()] = value !== undefined ? value : m.getName();
       }
       if (gasMap[enumName]) {
-        gasMap[enumName].members = {
-          ...(gasMap[enumName].members || {}),
+        gasMap[enumName].v = {
+          ...(gasMap[enumName].v || {}),
           ...members,
         };
       } else {
         gasMap[enumName] = {
-          kind: 'enum',
-          members,
+          k: 'e',
+          v: members,
         };
       }
     }
   }
 
   console.log(
-    `🧩 Found ${allInterfaces.length} interfaces and ${Object.values(gasMap).filter((v) => v.kind === 'enum').length} enums. Analyzing relationships...`,
+    `🧩 Found ${allInterfaces.length} interfaces and ${Object.values(gasMap).filter((v) => v.k === 'e').length} enums. Analyzing relationships...`,
   );
 
   const nameCounts = new Map<string, number>();
@@ -199,21 +199,21 @@ export const generateGasMap = async () => {
     if (className === 'Integer' || className === 'Byte') continue;
 
     if (!gasMap[className]) {
-      gasMap[className] = { kind: 'class', methods: {} };
+      gasMap[className] = { k: 'c', m: {} };
     } else {
       // 既存のエントリがある場合 (Enumなど)、クラスとしてマークしメソッドを初期化
-      gasMap[className].kind = 'class';
-      if (!gasMap[className].methods) {
-        gasMap[className].methods = {};
+      gasMap[className].k = 'c';
+      if (!gasMap[className].m) {
+        gasMap[className].m = {};
       }
     }
 
     const properties = interfaceDecl.getProperties();
     if (properties.length > 0) {
-      if (!gasMap[className].properties) {
-        gasMap[className].properties = {};
+      if (!gasMap[className].p) {
+        gasMap[className].p = {};
       }
-      const propsObj = gasMap[className].properties;
+      const propsObj = gasMap[className].p;
       if (propsObj) {
         for (const prop of properties) {
           const propName = prop.getName();
@@ -221,8 +221,8 @@ export const generateGasMap = async () => {
           const isReadonly = prop.isReadonly();
 
           propsObj[propName] = {
-            type: simplifyTypeName(propType),
-            isReadonly,
+            t: simplifyTypeName(propType),
+            ...(isReadonly && { ir: 1 }),
           };
         }
       }
@@ -232,23 +232,23 @@ export const generateGasMap = async () => {
     const methodsMap = new Map<
       string,
       {
-        returnType: string;
-        isChainable: boolean;
-        isIterable: boolean;
-        dimensions: number;
+        rt: string;
+        ic: boolean;
+        ii: boolean;
+        d: number;
         count: number;
       }
     >();
 
-    const existingMethods = gasMap[className].methods;
+    const existingMethods = gasMap[className].m;
     if (existingMethods) {
       for (const [name, info] of Object.entries(existingMethods)) {
         methodsMap.set(name, {
-          returnType: info.returnType,
-          isChainable: info.isChainable,
-          isIterable: (info as { isIterable?: boolean }).isIterable ?? false,
-          dimensions: (info as { dimensions?: number }).dimensions ?? 0,
-          count: info.overloads || 1,
+          rt: info.rt,
+          ic: info.ic === 1,
+          ii: info.ii === 1,
+          d: info.d ?? 0,
+          count: info.ol || 1,
         });
       }
     }
@@ -270,33 +270,33 @@ export const generateGasMap = async () => {
       const existing = methodsMap.get(methodName);
       if (existing) {
         existing.count++;
-        if (isIterable) existing.isIterable = true;
-        if (dims > (existing.dimensions || 0)) existing.dimensions = dims;
+        if (isIterable) existing.ii = true;
+        if (dims > (existing.d || 0)) existing.d = dims;
       } else {
         methodsMap.set(methodName, {
-          returnType: typeName,
-          isChainable,
-          isIterable,
-          dimensions: dims,
+          rt: typeName,
+          ic: isChainable,
+          ii: isIterable,
+          d: dims,
           count: 1,
         });
       }
     }
 
-    const methodsObj: MapEntry['methods'] = {};
+    const methodsObj: MapEntry['m'] = {};
     for (const [name, info] of methodsMap.entries()) {
       methodsObj[name] = {
-        returnType: info.returnType,
-        isChainable: info.isChainable,
-        ...(info.isIterable && { isIterable: true }),
-        ...(info.dimensions && { dimensions: info.dimensions }),
-        ...(info.count > 1 && { overloads: info.count }),
+        rt: info.rt,
+        ...(info.ic && { ic: 1 }),
+        ...(info.ii && { ii: 1 }),
+        ...(info.d > 0 && { d: info.d }),
+        ...(info.count > 1 && { ol: info.count }),
       };
     }
-    gasMap[className].methods = methodsObj;
+    gasMap[className].m = methodsObj;
   }
 
   const outputPath = path.join(GENERATED_DIR, 'map.json');
-  fs.writeFileSync(outputPath, JSON.stringify(gasMap, null, 2));
+  fs.writeFileSync(outputPath, JSON.stringify(gasMap));
   console.log(`✅ Map generated at ${outputPath}`);
 };

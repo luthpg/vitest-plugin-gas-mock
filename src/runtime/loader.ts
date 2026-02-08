@@ -2,23 +2,23 @@ import _gasMap from '../../generated/map.json';
 
 // 型定義のコピー (analyzer.tsから依存を切るため)
 export interface MapEntry {
-  kind: 'class' | 'enum';
-  methods?: {
+  k: 'c' | 'e'; // kind (class | enum)
+  m?: {
     [methodName: string]: {
-      returnType: string;
-      isChainable: boolean;
-      overloads?: number;
-      isIterable?: boolean;
-      dimensions?: number;
+      rt: string; // returnType
+      ic?: 1; // isChainable (omit if false)
+      ol?: number; // overloads (omit if 1)
+      ii?: 1; // isIterable (omit if false)
+      d?: number; // dimensions (omit if 0)
     };
   };
-  properties?: {
+  p?: {
     [propertyName: string]: {
-      type: string;
-      isReadonly: boolean;
+      t: string; // type
+      ir?: 1; // isReadonly (omit if false)
     };
   };
-  members?: Record<string, string | number>; // Enum用
+  v?: Record<string, string | number>; // members (Enum用)
 }
 
 export interface GasMap {
