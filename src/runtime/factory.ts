@@ -11,10 +11,43 @@ export function createMock<T = any>(
   className: string,
   currentPath?: string,
 ): T {
-  // 定義が存在しない場合は汎用的なモックを返す
-  const classDef = classMap[className];
   const path = currentPath || className;
+  let classDef = classMap[className];
+  let actualClassName = className;
 
+  // 定義が見つからない場合は FQN での検索を試みる
+  if (!classDef) {
+    const potentialFullMatches = Object.keys(classMap).filter((k) =>
+      k.endsWith(`.${className}`),
+    );
+
+    if (potentialFullMatches.length >= 1) {
+      // path からサービス名を推測して優先順位をつける
+      const serviceMatch = path.match(
+        /^(Spreadsheet|Document|Slides|Form|Gmail|Drive|Calendar)App/,
+      );
+      if (serviceMatch) {
+        const serviceName = serviceMatch[1];
+        const fqn = `${serviceName}.${className}`;
+        if (classMap[fqn]) {
+          actualClassName = fqn;
+        } else {
+          actualClassName = potentialFullMatches[0];
+        }
+      } else {
+        // 特殊な推測ができない場合は、Spreadsheet を優先的に探してみる（最も一般的なため）
+        const spreadsheetFqn = `Spreadsheet.${className}`;
+        if (classMap[spreadsheetFqn]) {
+          actualClassName = spreadsheetFqn;
+        } else {
+          actualClassName = potentialFullMatches[0];
+        }
+      }
+      classDef = classMap[actualClassName];
+    }
+  }
+
+  // 定義が存在しない場合は汎用的なモックを返す
   if (!classDef) {
     return new Proxy(vi.fn(), {
       get: (target, prop, receiver) => {
@@ -108,7 +141,7 @@ export function createMock<T = any>(
 
       // 4. ネストされたクラスやEnumの可能性を考慮してcreateMockを再帰的に呼ぶ
       // classNameを "Parent.Child" 形式で探してみる
-      const nestedClassName = `${className}.${paramName}`;
+      const nestedClassName = `${actualClassName}.${paramName}`;
       if (classMap[nestedClassName]) {
         return createMock(nestedClassName, `${path}.${paramName}`);
       }
@@ -166,25 +199,26 @@ function resolveReturnValue(type: string, path: string): unknown {
     return createMock(type, path);
   }
 
-  // 3. Enumやその他の型定義を探す
-  // ネストされた型の場合 (e.g. SpreadsheetApp.Direction)
-  if (classMap[`${path}.${type}`]) {
-    return createMock(`${path}.${type}`, `${path}.${type}`);
+  // 3. FQN での検索 (名前空間衝突回避されたクラス用)
+  // path (e.g. SpreadsheetApp.getActiveSpreadsheet.getRange) から
+  // 適切な名前空間を推測してみる
+  const serviceMatch = path.match(
+    /^(Spreadsheet|Document|Slides|Form|Gmail|Drive|Calendar)App/,
+  );
+  if (serviceMatch) {
+    const serviceName = serviceMatch[1];
+    const fqn = `${serviceName}.${type}`;
+    if (classMap[fqn]) {
+      return createMock(fqn, path);
+    }
   }
 
-  // 完全修飾名での解決を試みる (e.g. PropertiesService.ScriptProperties)
-  // ここでは簡易的に、typeがクラス名として登録されているか確認
+  // 推測できない場合は最初に見つかった FQN を使用
   const potentialFullMatches = Object.keys(classMap).filter((k) =>
     k.endsWith(`.${type}`),
   );
   if (potentialFullMatches.length >= 1) {
-    return createMock(potentialFullMatches[0], potentialFullMatches[0]);
-  }
-
-  // 4. Globalなクラス検索 (e.g. Sheet, Range)
-  const globalMatch = Object.keys(classMap).find((k) => k === type);
-  if (globalMatch) {
-    return createMock(globalMatch, globalMatch);
+    return createMock(potentialFullMatches[0], path);
   }
 
   // 4. それ以外は汎用的なモックを返す

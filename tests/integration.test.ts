@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 declare const SpreadsheetApp: any;
 declare const DriveApp: any;
+declare const DocumentApp: any;
 declare const BorderStyle: any;
 
 describe('Global Injection', () => {
@@ -31,5 +32,22 @@ describe('Global Injection', () => {
   it('should have other globals like DriveApp', () => {
     expect(DriveApp).toBeDefined();
     expect(DriveApp.getFiles).toBeDefined();
+  });
+});
+
+describe('Namespace Isolation', () => {
+  it('should distinguish between Spreadsheet Range and Document Range', () => {
+    const ssRange = SpreadsheetApp.getActiveSpreadsheet().getRange('A1');
+
+    // SpreadsheetApp.Range has getValue()
+    expect(ssRange.getValue).toBeDefined();
+    expect(typeof ssRange.getValue).toBe('function');
+
+    const docRange = DocumentApp.create('TestDoc').newRange();
+
+    // DocumentApp.Range has getRangeElements but NOT getValue
+    expect(docRange.getRangeElements).toBeDefined();
+    expect(typeof docRange.getRangeElements).toBe('function');
+    expect(docRange.getValue).toBeUndefined();
   });
 });

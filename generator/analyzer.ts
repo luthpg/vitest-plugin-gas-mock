@@ -4,7 +4,6 @@ import {
   type InterfaceDeclaration,
   type ModuleDeclaration,
   Project,
-  SyntaxKind,
   type TypeNode,
 } from 'ts-morph';
 
@@ -100,7 +99,8 @@ export const generateGasMap = async () => {
     return;
   }
 
-  const allInterfaces: InterfaceDeclaration[] = [];
+  const allInterfaces: { decl: InterfaceDeclaration; namespacePath: string }[] =
+    [];
 
   const collectDeclarations = (
     node: ModuleDeclaration,
@@ -108,7 +108,9 @@ export const generateGasMap = async () => {
   ) => {
     const interfaces = node.getInterfaces?.();
     if (interfaces) {
-      allInterfaces.push(...interfaces);
+      for (const i of interfaces) {
+        allInterfaces.push({ decl: i, namespacePath });
+      }
     }
 
     const enums = node.getEnums?.();
@@ -177,10 +179,22 @@ export const generateGasMap = async () => {
     `🧩 Found ${allInterfaces.length} interfaces and ${Object.values(gasMap).filter((v) => v.kind === 'enum').length} enums. Analyzing relationships...`,
   );
 
-  const gasInterfaceNames = new Set(allInterfaces.map((i) => i.getName()));
+  const nameCounts = new Map<string, number>();
+  for (const item of allInterfaces) {
+    const name = item.decl.getName();
+    nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+  }
 
-  for (const interfaceDecl of allInterfaces) {
-    const className = interfaceDecl.getName();
+  const gasInterfaceNames = new Set(allInterfaces.map((i) => i.decl.getName()));
+
+  for (const { decl: interfaceDecl, namespacePath } of allInterfaces) {
+    const simpleName = interfaceDecl.getName();
+    let className = simpleName;
+
+    // 重複があり、かつ親名前空間がある場合は FQN をキーにする
+    if ((nameCounts.get(simpleName) || 0) > 1 && namespacePath) {
+      className = `${namespacePath}.${simpleName}`;
+    }
 
     if (className === 'Integer' || className === 'Byte') continue;
 
@@ -199,15 +213,18 @@ export const generateGasMap = async () => {
       if (!gasMap[className].properties) {
         gasMap[className].properties = {};
       }
-      for (const prop of properties) {
-        const propName = prop.getName();
-        const propType = prop.getType().getText();
-        const isReadonly = prop.isReadonly();
+      const propsObj = gasMap[className].properties;
+      if (propsObj) {
+        for (const prop of properties) {
+          const propName = prop.getName();
+          const propType = prop.getType().getText();
+          const isReadonly = prop.isReadonly();
 
-        gasMap[className].properties[propName] = {
-          type: simplifyTypeName(propType),
-          isReadonly,
-        };
+          propsObj[propName] = {
+            type: simplifyTypeName(propType),
+            isReadonly,
+          };
+        }
       }
     }
 
@@ -223,8 +240,9 @@ export const generateGasMap = async () => {
       }
     >();
 
-    if (gasMap[className].methods) {
-      for (const [name, info] of Object.entries(gasMap[className].methods)) {
+    const existingMethods = gasMap[className].methods;
+    if (existingMethods) {
+      for (const [name, info] of Object.entries(existingMethods)) {
         methodsMap.set(name, {
           returnType: info.returnType,
           isChainable: info.isChainable,
