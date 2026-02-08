@@ -66,9 +66,9 @@ export function createMock<T = any>(
   }
 
   // Enumの場合は値をそのまま返す
-  if (classDef.kind === 'enum' && classDef.members) {
+  if (classDef.k === 'e' && classDef.v) {
     // Enum自体が個別の値として読み込まれる場合
-    return classDef.members as unknown as T;
+    return classDef.v as unknown as T;
   }
 
   const target = vi.fn();
@@ -82,19 +82,19 @@ export function createMock<T = any>(
       const paramName = String(prop);
 
       // 1. プロパティ定義にあるか確認
-      if (classDef.properties?.[paramName]) {
-        const propType = classDef.properties[paramName].type;
+      if (classDef.p?.[paramName]) {
+        const propType = classDef.p[paramName].t;
         return resolveReturnValue(propType, `${path}.${paramName}`);
       }
 
       // 2. Enumメンバーか確認 (analyzerでmembersが抽出されている場合)
-      if (classDef.members && paramName in classDef.members) {
-        return classDef.members[paramName];
+      if (classDef.v && paramName in classDef.v) {
+        return classDef.v[paramName];
       }
 
       // 3. メソッドか確認
-      if (classDef.methods?.[paramName]) {
-        const methodDef = classDef.methods[paramName];
+      if (classDef.m?.[paramName]) {
+        const methodDef = classDef.m[paramName];
 
         // すでに値がセットされていればそれを返す
         if (Reflect.has(target, prop)) {
@@ -112,15 +112,12 @@ export function createMock<T = any>(
           }
 
           // メソッド実行時の戻り値
-          if (methodDef.returnType) {
-            if (methodDef.returnType === 'void') {
+          if (methodDef.rt) {
+            if (methodDef.rt === 'void') {
               return undefined;
             }
-            const dims = methodDef.dimensions || (methodDef.isIterable ? 1 : 0);
-            const baseValue = resolveReturnValue(
-              methodDef.returnType,
-              nextPath,
-            );
+            const dims = methodDef.d || (methodDef.ii === 1 ? 1 : 0);
+            const baseValue = resolveReturnValue(methodDef.rt, nextPath);
 
             let result = baseValue;
             for (let i = 0; i < dims; i++) {
