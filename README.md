@@ -77,6 +77,31 @@ it('should return specific value for a chain', () => {
 });
 ```
 
+### Dynamic Return Values
+
+You can pass a callback function to `mockChain` to determine the return value dynamically based on arguments.
+
+```typescript
+mockChain('SpreadsheetApp.getActiveSpreadsheet.getSheetByName', (name) => {
+  if (name === 'Missing') {
+    return null;
+  }
+  // You can return a partial object (DeepPartial),
+  // so you don't need to implement all methods like `activate`, `copy`, etc.
+  return {
+    getName: () => name,
+  };
+});
+```
+
+### Type Safety
+
+The `mockChain` helper provides strict type inference:
+
+- **Path Validation**: The path string (e.g., `'SpreadsheetApp.getActiveSpreadsheet'`) is validated against GAS types.
+- **Callback Arguments**: Arguments in the callback function are automatically typed.
+- **Return Type**: The return value is checked against the expected GAS type (supports `DeepPartial` for easier mocking).
+
 ## How it works
 
 The plugin performs the following steps:
