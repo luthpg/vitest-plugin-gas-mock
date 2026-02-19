@@ -1,6 +1,6 @@
 {
   "name": "@ciderjs/vitest-plugin-gas-mock",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Vitest plugin to mock Google Apps Script environment",
   "main": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -26,7 +26,7 @@
     "typecheck": "tsc --noEmit",
     "generate": "jiti ./generator/index.ts",
     "build": "pnpm generate && unbuild -c",
-    "test": "pnpm generate && vitest run --coverage",
+    "test": "pnpm generate && vitest --typecheck --run && vitest run --coverage",
     "prepare": "pnpm generate"
   },
   "keywords": [

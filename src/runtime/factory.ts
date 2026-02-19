@@ -108,7 +108,11 @@ export function createMock<T = any>(
           // オーバーライドを確認
           const override = getOverride(nextPath);
           if (override.hasOverride) {
-            return override.value;
+            const overrideValue = override.value;
+            if (typeof overrideValue === 'function') {
+              return overrideValue(..._args);
+            }
+            return overrideValue;
           }
 
           // メソッド実行時の戻り値
